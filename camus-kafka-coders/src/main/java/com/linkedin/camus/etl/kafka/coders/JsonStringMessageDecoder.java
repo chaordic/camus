@@ -92,7 +92,8 @@ public class JsonStringMessageDecoder extends MessageDecoder<byte[], String> {
 				try {
 					timestamp = new SimpleDateFormat(timestampFormat).parse(timestampString).getTime();
 				} catch (Exception e) {
-					log.error("Could not parse timestamp '" + timestampString + "' while decoding JSON message.");
+					log.error("Could not parse timestamp '" + timestampString + "' with format '" +
+					            timestampFormat + "'while decoding JSON message.");
 				}
 			}
 		}
