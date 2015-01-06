@@ -13,10 +13,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +55,10 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.tools.DistCp;
+import org.apache.hadoop.tools.DistCpOptionSwitch;
+import org.apache.hadoop.tools.DistCpOptions;
+import org.apache.hadoop.tools.util.DistCpUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
@@ -68,6 +72,11 @@ import org.joda.time.format.DateTimeFormatter;
 
 public class CamusJob extends Configured implements Tool {
 
+	private static final String S3N_PREFIX = "s3n://";
+
+	public static final String ETL_S3_SYNC_ENABLED = "etl.s3.sync.enabled";
+	public static final String ETL_S3_SYNC_PATH = "etl.s3.sync.path";
+	public static final String ETL_S3_SYNC_DISTCP_LOGDIR = "etl.s3.sync.distcp.logdir";
 	public static final String ETL_EXECUTION_BASE_PATH = "etl.execution.base.path";
 	public static final String ETL_EXECUTION_HISTORY_PATH = "etl.execution.history.path";
 	public static final String ETL_COUNTS_PATH = "etl.counts.path";
@@ -92,7 +101,7 @@ public class CamusJob extends Configured implements Tool {
 	private static org.apache.log4j.Logger log;
 
 	private final Properties props;
-	
+
 	private DateTimeFormatter dateFmt = DateUtils.getDateTimeFormatter(
       "YYYY-MM-dd-HH-mm-ss", DateTimeZone.UTC);
 
@@ -103,7 +112,7 @@ public class CamusJob extends Configured implements Tool {
 	public CamusJob(Properties props) throws IOException {
 		this(props, org.apache.log4j.Logger.getLogger(CamusJob.class));
 	}
-	
+
 	 public CamusJob(Properties props, Logger log) throws IOException {
 	    this.props = props;
 	    this.log = log;
@@ -128,19 +137,19 @@ public class CamusJob extends Configured implements Tool {
 				(timingMap.get(name) == null ? 0 : timingMap.get(name))
 						+ System.currentTimeMillis());
 	}
-	
+
 	private Job createJob(Properties props) throws IOException {
-	  Job job; 
+	  Job job;
 	  if(getConf() == null)
 	    {
-	      setConf(new Configuration()); 
+             setConf(new Configuration());
 	    }
-	  
+
 	  populateConf(props, getConf(), log);
-	  
+
 	  job = new Job(getConf());
 	  job.setJarByClass(CamusJob.class);
-	  
+
 	   if(job.getConfiguration().get("camus.job.name") != null)
 	    {
 	      job.setJobName(job.getConfiguration().get("camus.job.name"));
@@ -149,7 +158,7 @@ public class CamusJob extends Configured implements Tool {
 	   {
 	     job.setJobName("Camus Job");
 	   }
-	   
+
 	  return job;
 	}
 
@@ -229,7 +238,7 @@ public class CamusJob extends Configured implements Tool {
 		long limit = (long) (content.getQuota() * job.getConfiguration()
 				.getFloat(ETL_EXECUTION_HISTORY_MAX_OF_QUOTA, (float) .5));
 		limit = limit == 0 ? 50000 : limit;
-		
+
 		if (props.contains(ETL_BASEDIR_QUOTA_OVERIDE)){
 		  limit = Long.valueOf(props.getProperty(ETL_BASEDIR_QUOTA_OVERIDE));
 		}
@@ -243,7 +252,7 @@ public class CamusJob extends Configured implements Tool {
 				return f1.getPath().getName().compareTo(f2.getPath().getName());
 			}
 		});
-		
+
 		// removes oldest directory until we get under required % of count
 		// quota. Won't delete the most recent directory.
 		for (int i = 0; i < executions.length - 1 && limit < currentCount; i++) {
@@ -254,11 +263,11 @@ public class CamusJob extends Configured implements Tool {
 					- execContent.getDirectoryCount();
 			fs.delete(stat.getPath(), true);
 		}
-		
+
 		// removing failed exectutions if we need room
 		if (limit < currentCount){
 		  FileStatus[] failedExecutions = fs.listStatus(execBasePath, new PathFilter() {
-		    
+
 		    public boolean accept(Path path) {
 		      try {
 		        dateFmt.parseDateTime(path.getName());
@@ -268,13 +277,13 @@ public class CamusJob extends Configured implements Tool {
 		      }
 		    }
 		  });
-		  
+
 		  Arrays.sort(failedExecutions, new Comparator<FileStatus>() {
 	      public int compare(FileStatus f1, FileStatus f2) {
 	        return f1.getPath().getName().compareTo(f2.getPath().getName());
 	      }
 	    });
-		  
+
 	    for (int i = 0; i < failedExecutions.length && limit < currentCount; i++) {
 	      FileStatus stat = failedExecutions[i];
 	      log.info("removing failed execution: " + stat.getPath().getName());
@@ -309,7 +318,7 @@ public class CamusJob extends Configured implements Tool {
 				+ newExecutionOutput.toString());
 
 		EtlInputFormat.setLogger(log);
-		
+
 		job.setInputFormatClass(EtlInputFormat.class);
 		job.setOutputFormatClass(EtlMultiOutputFormat.class);
 		job.setNumReduceTasks(0);
@@ -343,6 +352,13 @@ public class CamusJob extends Configured implements Tool {
 
 		log.info("Job finished");
 		stopTiming("commit");
+
+		if (job.isSuccessful() && isS3SyncEnabled(job.getConfiguration())) {
+			startTiming("s3-sync");
+			syncDestinationPathWithS3(job.getConfiguration());
+			stopTiming("s3-sync");
+		}
+
 		stopTiming("total");
 		createReport(job, timingMap);
 
@@ -361,6 +377,26 @@ public class CamusJob extends Configured implements Tool {
 				}
 			}
 			throw new RuntimeException("hadoop job failed");
+		}
+	}
+
+	private void syncDestinationPathWithS3(Configuration conf) {
+		Path hdfsPath = new Path(conf.get(EtlMultiOutputFormat.ETL_DESTINATION_PATH));
+		Path s3Path = getS3SyncPath(conf);
+
+		log.info("Syncing HDFS path " + hdfsPath.getName() + " with S3 path: " + s3Path.getName());
+
+		DistCpOptions distCpOptions = new DistCpOptions(Collections.singletonList(hdfsPath), s3Path);
+		distCpOptions.setSyncFolder(true);
+		if (conf.get(ETL_S3_SYNC_DISTCP_LOGDIR) != null) {
+			distCpOptions.setLogPath(new Path(conf.get(ETL_S3_SYNC_DISTCP_LOGDIR)));
+		}
+
+		try {
+			DistCp distCp = new DistCp(conf, distCpOptions);
+			distCp.execute();
+		} catch (Exception e) {
+			log.error("Error while syncing output with S3.", e);
 		}
 	}
 
@@ -474,7 +510,7 @@ public class CamusJob extends Configured implements Tool {
 	/**
 	 * Creates a diagnostic report mostly focused on timing breakdowns. Useful
 	 * for determining where to optimize.
-	 * 
+	 *
 	 * @param job
 	 * @param timingMap
 	 * @throws IOException
@@ -506,6 +542,13 @@ public class CamusJob extends Configured implements Tool {
 		sb.append(String.format("    %12s %6.1f (%s)\n", "commit", commit,
 				NumberFormat.getPercentInstance().format(commit / total)
 						.toString()));
+
+		if (isS3SyncEnabled(job.getConfiguration())) {
+			double s3Sync = timingMap.get("s3-sync") / 1000;
+			sb.append(String.format("    %12s %6.1f (%s)\n", "s3 sync", s3Sync,
+					NumberFormat.getPercentInstance().format(s3Sync / total)
+							.toString()));
+		}
 
 		int minutes = (int) total / 60;
 		int seconds = (int) total % 60;
@@ -668,7 +711,7 @@ public class CamusJob extends Configured implements Tool {
 		if (brokers == null) {
 			brokers = job.getConfiguration().get(KAFKA_HOST_URL);
 			if (brokers != null) {
-				log.warn("The configuration properties " + KAFKA_HOST_URL + " and " + 
+				log.warn("The configuration properties " + KAFKA_HOST_URL + " and " +
 					KAFKA_HOST_PORT + " are deprecated. Please switch to using " + KAFKA_BROKERS);
 				return brokers + ":" + job.getConfiguration().getInt(KAFKA_HOST_PORT, 10251);
 			}
@@ -701,5 +744,13 @@ public class CamusJob extends Configured implements Tool {
 
 	public static boolean getLog4jConfigure(JobContext job) {
 		return job.getConfiguration().getBoolean(LOG4J_CONFIGURATION, false);
+	}
+
+	public static boolean isS3SyncEnabled(Configuration conf) {
+		return conf.getBoolean(ETL_S3_SYNC_ENABLED, false);
+	}
+
+	public static Path getS3SyncPath(Configuration conf) {
+		return new Path(S3N_PREFIX + conf.get(ETL_S3_SYNC_PATH));
 	}
 }
