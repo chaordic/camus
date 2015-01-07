@@ -32,7 +32,7 @@ public class FieldBasedPartitioner extends Partitioner {
         for (String partitionField : partitionFields) {
             Writable partitionElement = key.getPartitionMap().get(new Text(partitionField));
             if (partitionElement != null) {
-                partitionElements.append(".").append(partitionElement.toString());
+                partitionElements.append("_").append(partitionElement.toString());
             }
         }
 
@@ -45,7 +45,7 @@ public class FieldBasedPartitioner extends Partitioner {
         sb.append(topic).append("/");
         sb.append(EtlMultiOutputFormat.getDestPathTopicSubDir(context)).append("/");
 
-        StringTokenizer partitionElements = new StringTokenizer(encodedPartition, ".");
+        StringTokenizer partitionElements = new StringTokenizer(encodedPartition, "_");
         DateTime bucket = new DateTime(Long.valueOf(partitionElements.nextToken()));
         sb.append(bucket.toString(outputDateFormatter));
 
