@@ -132,7 +132,7 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
         try {
           log.info("Record writer cache is full with " + maxCapacity + " entries. Closing and removing LRU record writer: " + eldest.getKey());
           recordWriter.close(context);
-        } catch (IOException | InterruptedException e) {
+        } catch (Exception e) {
           log.error("Error while closing expired record writer from cache: " + eldest.getKey(), e);
         }
       }
