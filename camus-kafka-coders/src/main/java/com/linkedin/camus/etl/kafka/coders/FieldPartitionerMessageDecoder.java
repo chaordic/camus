@@ -29,8 +29,8 @@ import org.apache.log4j.Logger;
  * This MessageDecoder returns a CamusWrapper that works with Strings payloads,
  * since JSON data is always a String.
  */
-public class FieldBasedPartitionerMessageDecoder extends MessageDecoder<byte[], String> {
-	private static org.apache.log4j.Logger log = Logger.getLogger(FieldBasedPartitionerMessageDecoder.class);
+public class FieldPartitionerMessageDecoder extends MessageDecoder<byte[], String> {
+	private static org.apache.log4j.Logger log = Logger.getLogger(FieldPartitionerMessageDecoder.class);
 
 	// Property for format of timestamp in JSON timestamp field.
 	public  static final String CAMUS_MESSAGE_TIMESTAMP_FORMAT = "camus.message.timestamp.format";
