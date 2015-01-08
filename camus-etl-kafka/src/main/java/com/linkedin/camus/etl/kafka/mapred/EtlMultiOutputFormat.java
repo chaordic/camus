@@ -39,7 +39,6 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     public static final String ETL_DEFAULT_TIMEZONE = "etl.default.timezone";
     public static final String ETL_DEFLATE_LEVEL = "etl.deflate.level";
     public static final String ETL_AVRO_WRITER_SYNC_INTERVAL = "etl.avro.writer.sync.interval";
-    public static final String ETL_STRING_WRITER_SYNC_INTERVAL = "etl.string.writer.sync.interval";
     public static final String ETL_OUTPUT_FILE_TIME_PARTITION_MINS = "etl.output.file.time.partition.mins";
 
     public static final String KAFKA_MONITOR_TIME_GRANULARITY_MS = "kafka.monitor.time.granularity";
@@ -86,7 +85,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                 .getClass(ETL_RECORD_WRITER_PROVIDER_CLASS,
                         AvroRecordWriterProvider.class);
     }
-
+    
     public static RecordWriterProvider getRecordWriterProvider(JobContext job) {
         try
         {
@@ -135,21 +134,13 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     public static long getMonitorTimeGranularityMs(JobContext job) {
       return job.getConfiguration().getInt(KAFKA_MONITOR_TIME_GRANULARITY_MS, 10) * 60000L;
     }
-
+    
     public static void setEtlAvroWriterSyncInterval(JobContext job, int val) {
         job.getConfiguration().setInt(ETL_AVRO_WRITER_SYNC_INTERVAL, val);
     }
 
     public static int getEtlAvroWriterSyncInterval(JobContext job) {
         return job.getConfiguration().getInt(ETL_AVRO_WRITER_SYNC_INTERVAL, 16000);
-    }
-
-    public static void setEtlStringWriterSyncInterval(JobContext job, int val) {
-        job.getConfiguration().setInt(ETL_STRING_WRITER_SYNC_INTERVAL, val);
-    }
-
-    public static int getEtlStringWriterSyncInterval(JobContext job) {
-        return job.getConfiguration().getInt(ETL_STRING_WRITER_SYNC_INTERVAL, 16000);
     }
 
     public static void setEtlDeflateLevel(JobContext job, int val) {
@@ -196,14 +187,14 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         Partitioner partitioner = getPartitioner(context, key.getTopic());
         return "data." + key.getTopic().replaceAll("\\.", "_") + "." + key.getLeaderId() + "." + key.getPartition() + "." + partitioner.encodePartition(context, key);
     }
-
+    
     public static void setDefaultPartitioner(JobContext job, Class<?> cls) {
       job.getConfiguration().setClass(ETL_DEFAULT_PARTITIONER_CLASS, cls, Partitioner.class);
     }
-
+    
     public static Partitioner getDefaultPartitioner(JobContext job) {
         return ReflectionUtils.newInstance(getDefaultPartitionerClass(job), job.getConfiguration());
-    }
+    }    
 
     public static Class<? extends Partitioner> getDefaultPartitionerClass(JobContext job) {
         return job.getConfiguration().getClass(ETL_DEFAULT_PARTITIONER_CLASS, DefaultPartitioner.class, Partitioner.class);
