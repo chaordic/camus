@@ -543,7 +543,7 @@ public class CamusJob extends Configured implements Tool {
 				NumberFormat.getPercentInstance().format(commit / total)
 						.toString()));
 
-		if (!job.isSuccessful() && isS3SyncEnabled(job.getConfiguration())) {
+		if (job.isSuccessful() && isS3SyncEnabled(job.getConfiguration())) {
 			double s3Sync = timingMap.get("s3-sync") / 1000;
 			sb.append(String.format("    %12s %6.1f (%s)\n", "s3 sync", s3Sync,
 					NumberFormat.getPercentInstance().format(s3Sync / total)
