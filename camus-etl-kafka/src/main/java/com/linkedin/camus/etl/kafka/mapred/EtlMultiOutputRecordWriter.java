@@ -63,9 +63,8 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
   public void close(TaskAttemptContext context) throws IOException,
       InterruptedException
   {
-    for (String w : dataWriters.keySet())
-    {
-      dataWriters.get(w).close(context);
+    for (RecordWriter<IEtlKey, CamusWrapper> dataWriter : dataWriters.values()) {
+      dataWriter.close(context);
     }
     errorWriter.close();
   }
