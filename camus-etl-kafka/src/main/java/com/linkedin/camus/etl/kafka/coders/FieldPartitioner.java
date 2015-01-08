@@ -15,7 +15,7 @@ import com.linkedin.camus.etl.IEtlKey;
 import com.linkedin.camus.etl.kafka.common.DateUtils;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 
-public class FieldBasedPartitioner extends Partitioner {
+public class FieldPartitioner extends Partitioner {
 
     protected static final String OUTPUT_DATE_FORMAT = "YYYY/MM/dd/HH";
     //protected DateTimeZone outputDateTimeZone = null;
@@ -28,7 +28,7 @@ public class FieldBasedPartitioner extends Partitioner {
         Long datePartition = DateUtils.getPartition(outfilePartitionMs, key.getTime(), outputDateFormatter.getZone());
 
         StringBuilder partitionElements = new StringBuilder(datePartition.toString());
-        String[] partitionFields = context.getConfiguration().get(FieldBasedPartitionerMessageDecoder.CAMUS_MESSAGE_PARTITION_FIELDS, "").split(",");
+        String[] partitionFields = context.getConfiguration().get(FieldPartitionerMessageDecoder.CAMUS_MESSAGE_PARTITION_FIELDS, "").split(",");
         for (String partitionField : partitionFields) {
             Writable partitionElement = key.getPartitionMap().get(new Text(partitionField));
             if (partitionElement != null) {
