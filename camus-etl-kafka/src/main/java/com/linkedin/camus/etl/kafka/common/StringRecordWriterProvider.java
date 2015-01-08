@@ -8,7 +8,6 @@ import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-import org.apache.avro.file.CodecFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -23,7 +22,6 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.log4j.Logger;
 
 
 /**
@@ -101,12 +99,14 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
         );
 
         FileSystem fs = path.getFileSystem(context.getConfiguration());
+        final int syncInterval = EtlMultiOutputFormat.getEtlStringWriterSyncInterval(context);
         if (!isCompressed) {
             FSDataOutputStream fileOut = fs.create(path, false);
-            return new ByteRecordWriter(fileOut, recordDelimiter);
+            ByteRecordWriter byteRecordWriter = new ByteRecordWriter(fileOut, recordDelimiter, syncInterval);
+            return byteRecordWriter;
         } else {
             FSDataOutputStream fileOut = fs.create(path, false);
-            return new ByteRecordWriter(new DataOutputStream(codec.createOutputStream(fileOut)), recordDelimiter);
+            return new ByteRecordWriter(new DataOutputStream(codec.createOutputStream(fileOut)), recordDelimiter, syncInterval);
         }
 
         /*
@@ -131,12 +131,21 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
     }
 
     protected static class ByteRecordWriter extends RecordWriter<IEtlKey, CamusWrapper> {
+        private final Integer syncInterval;
+
         private DataOutputStream out;
         private String recordDelimiter;
+        private long nextSync;
 
-        public ByteRecordWriter(DataOutputStream out, String recordDelimiter) {
+        public ByteRecordWriter(DataOutputStream out, String recordDelimiter, Integer syncInterval) {
             this.out = out;
             this.recordDelimiter = recordDelimiter;
+            this.syncInterval = syncInterval;
+            updateNextSync();
+        }
+
+        private void updateNextSync() {
+            this.nextSync = System.currentTimeMillis() + syncInterval;
         }
 
         @Override
@@ -145,6 +154,10 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
             if (!nullValue) {
             	String record = (String)value.getRecord() + recordDelimiter;
                 out.write(record.getBytes());
+                if (System.currentTimeMillis() >= this.nextSync) {
+                    out.flush();
+                    updateNextSync();
+                }
             }
         }
 
