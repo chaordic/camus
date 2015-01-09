@@ -20,14 +20,15 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.mortbay.log.Log;
-
+import org.apache.log4j.Logger;
 
 /**
  * Provides a RecordWriter that uses FSDataOutputStream to write
  * a String record as bytes to HDFS without any reformatting or compession.
  */
 public class StringRecordWriterProvider implements RecordWriterProvider {
+    private static Logger log = Logger.getLogger(StringRecordWriterProvider.class);
+
     public static final String ETL_OUTPUT_RECORD_DELIMITER = "etl.output.record.delimiter";
     public static final String DEFAULT_RECORD_DELIMITER    = "";
 
@@ -95,7 +96,7 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
         FileSystem fs = path.getFileSystem(context.getConfiguration());
         FSDataOutputStream fileOut;
         if (fs.exists(path)) {
-            Log.info("File " + path + " already exists. Re-opening and appending.");
+            log.info("File " + path + " already exists. Re-opening and appending.");
             fileOut = fs.append(path);
         } else {
             fileOut = fs.create(path, false);
