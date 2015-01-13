@@ -7,12 +7,14 @@ import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionOutputStream;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.mapreduce.RecordWriter;
@@ -105,7 +107,8 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
         if (!isCompressed) {
             return new ByteRecordWriter(fileOut, recordDelimiter);
         } else {
-            return new ByteRecordWriter(new DataOutputStream(codec.createOutputStream(fileOut)), recordDelimiter);
+            CompressionOutputStream createOutputStream = codec.createOutputStream(fileOut);
+            return new ByteRecordWriter(createOutputStream, recordDelimiter);
         }
 
         /*
@@ -130,10 +133,10 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
     }
 
     protected static class ByteRecordWriter extends RecordWriter<IEtlKey, CamusWrapper> {
-        private DataOutputStream out;
+        private OutputStream out;
         private String recordDelimiter;
 
-        public ByteRecordWriter(DataOutputStream out, String recordDelimiter) {
+        public ByteRecordWriter(OutputStream out, String recordDelimiter) {
             this.out = out;
             this.recordDelimiter = recordDelimiter;
         }
@@ -149,6 +152,11 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
 
         @Override
         public void close(TaskAttemptContext taskAttemptContext) throws IOException, InterruptedException {
+            if (out instanceof CompressionOutputStream) {
+                log.info("Finishing compressed output stream.");
+                CompressionOutputStream compressionOutStream = (CompressionOutputStream)out;
+                compressionOutStream.finish(); //needed due to gzip memory leak
+            }
             out.close();
         }
     }
