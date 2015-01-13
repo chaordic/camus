@@ -2,7 +2,8 @@ package com.linkedin.camus.etl.kafka.mapred;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -10,6 +11,7 @@ import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.Writer;
 import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
 
 import com.linkedin.camus.coders.CamusWrapper;
@@ -20,14 +22,14 @@ import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 
 public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
 {
+  private static Logger log = Logger.getLogger(EtlMultiOutputRecordWriter.class);
+
   private TaskAttemptContext context;
   private Writer errorWriter = null;
   private String currentTopic = "";
   private long beginTimeStamp = 0;
 
-  private HashMap<String, RecordWriter<IEtlKey, CamusWrapper>> dataWriters =
-      new HashMap<String, RecordWriter<IEtlKey, CamusWrapper>>();
-
+  private RecordWriterCache dataWriters;
   private EtlMultiOutputCommitter committer;
 
   public EtlMultiOutputRecordWriter(TaskAttemptContext context, EtlMultiOutputCommitter committer) throws IOException,
@@ -54,15 +56,15 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
     {
       beginTimeStamp = 0;
     }
+    this.dataWriters = new RecordWriterCache(EtlMultiOutputFormat.getMaxConcurrentWriters(context));
   }
 
   @Override
   public void close(TaskAttemptContext context) throws IOException,
       InterruptedException
   {
-    for (String w : dataWriters.keySet())
-    {
-      dataWriters.get(w).close(context);
+    for (RecordWriter<IEtlKey, CamusWrapper> dataWriter : dataWriters.values()) {
+      dataWriter.close(context);
     }
     errorWriter.close();
   }
@@ -110,6 +112,33 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
     }
   }
 
+  private class RecordWriterCache extends LinkedHashMap<String, RecordWriter<IEtlKey, CamusWrapper>>
+  {
+    private int maxCapacity;
+
+    public RecordWriterCache(int maxCapacity)
+    {
+      super(16, 0.75F, true);
+      this.maxCapacity = maxCapacity;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<String, RecordWriter<IEtlKey, CamusWrapper>> eldest)
+    {
+      boolean isFull = maxCapacity != -1 && size() >= this.maxCapacity;
+      if (isFull) {
+        RecordWriter<IEtlKey,CamusWrapper> recordWriter = eldest.getValue();
+        try {
+          log.info("Record writer cache is full with " + maxCapacity + " entries. Closing and removing last recently used record writer: " + eldest.getKey());
+          recordWriter.close(context);
+        } catch (Exception e) {
+          log.error("Error while closing expired record writer from cache: " + eldest.getKey(), e);
+        }
+      }
+      return isFull;
+    }
+  }
+
   private RecordWriter<IEtlKey, CamusWrapper> getDataRecordWriter(TaskAttemptContext context,
                                                                   String fileName,
                                                                   CamusWrapper value) throws IOException,
@@ -131,7 +160,7 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
     {
       throw new IllegalStateException(e);
     }
-    catch (Exception e) 
+    catch (Exception e)
     {
         throw new IllegalStateException(e);
     }

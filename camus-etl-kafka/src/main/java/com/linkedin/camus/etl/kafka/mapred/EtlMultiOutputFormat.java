@@ -46,6 +46,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     public static final String ETL_OUTPUT_CODEC = "etl.output.codec";
     public static final String ETL_DEFAULT_OUTPUT_CODEC = "deflate";
     public static final String ETL_RECORD_WRITER_PROVIDER_CLASS = "etl.record.writer.provider.class";
+    public static final String ETL_MAX_CONCURRENT_WRITERS = "etl.record.writer.max.concurrent.writers";
 
     public static final DateTimeFormatter FILE_DATE_FORMATTER = DateUtils
             .getDateTimeFormatter("YYYYMMddHH");
@@ -85,7 +86,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                 .getClass(ETL_RECORD_WRITER_PROVIDER_CLASS,
                         AvroRecordWriterProvider.class);
     }
-    
+
     public static RecordWriterProvider getRecordWriterProvider(JobContext job) {
         try
         {
@@ -97,6 +98,14 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         {
           throw new RuntimeException(e);
         }
+    }
+
+    public static void setMaxConcurrentWriters(JobContext job, Integer maxOpenFiles) {
+        job.getConfiguration().setInt(ETL_MAX_CONCURRENT_WRITERS, maxOpenFiles);
+    }
+
+    public static Integer getMaxConcurrentWriters(JobContext job) {
+        return job.getConfiguration().getInt(ETL_MAX_CONCURRENT_WRITERS, -1);
     }
 
     public static void setDefaultTimeZone(JobContext job, String tz) {
@@ -134,7 +143,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     public static long getMonitorTimeGranularityMs(JobContext job) {
       return job.getConfiguration().getInt(KAFKA_MONITOR_TIME_GRANULARITY_MS, 10) * 60000L;
     }
-    
+
     public static void setEtlAvroWriterSyncInterval(JobContext job, int val) {
         job.getConfiguration().setInt(ETL_AVRO_WRITER_SYNC_INTERVAL, val);
     }
@@ -187,14 +196,14 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         Partitioner partitioner = getPartitioner(context, key.getTopic());
         return "data." + key.getTopic().replaceAll("\\.", "_") + "." + key.getLeaderId() + "." + key.getPartition() + "." + partitioner.encodePartition(context, key);
     }
-    
+
     public static void setDefaultPartitioner(JobContext job, Class<?> cls) {
       job.getConfiguration().setClass(ETL_DEFAULT_PARTITIONER_CLASS, cls, Partitioner.class);
     }
-    
+
     public static Partitioner getDefaultPartitioner(JobContext job) {
         return ReflectionUtils.newInstance(getDefaultPartitionerClass(job), job.getConfiguration());
-    }    
+    }
 
     public static Class<? extends Partitioner> getDefaultPartitionerClass(JobContext job) {
         return job.getConfiguration().getClass(ETL_DEFAULT_PARTITIONER_CLASS, DefaultPartitioner.class, Partitioner.class);

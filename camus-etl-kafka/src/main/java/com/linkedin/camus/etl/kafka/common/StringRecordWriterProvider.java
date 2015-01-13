@@ -8,7 +8,6 @@ import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-import org.apache.avro.file.CodecFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -23,12 +22,13 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.log4j.Logger;
 
-
 /**
  * Provides a RecordWriter that uses FSDataOutputStream to write
  * a String record as bytes to HDFS without any reformatting or compession.
  */
 public class StringRecordWriterProvider implements RecordWriterProvider {
+    private static Logger log = Logger.getLogger(StringRecordWriterProvider.class);
+
     public static final String ETL_OUTPUT_RECORD_DELIMITER = "etl.output.record.delimiter";
     public static final String DEFAULT_RECORD_DELIMITER    = "";
 
@@ -94,11 +94,17 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
         );
 
         FileSystem fs = path.getFileSystem(context.getConfiguration());
+        FSDataOutputStream fileOut;
+        if (fs.exists(path)) {
+            log.info("File " + path + " already exists. Re-opening and appending.");
+            fileOut = fs.append(path);
+        } else {
+            fileOut = fs.create(path, false);
+        }
+
         if (!isCompressed) {
-            FSDataOutputStream fileOut = fs.create(path, false);
             return new ByteRecordWriter(fileOut, recordDelimiter);
         } else {
-            FSDataOutputStream fileOut = fs.create(path, false);
             return new ByteRecordWriter(new DataOutputStream(codec.createOutputStream(fileOut)), recordDelimiter);
         }
 
