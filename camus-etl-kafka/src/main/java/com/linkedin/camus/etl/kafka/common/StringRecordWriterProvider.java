@@ -7,12 +7,15 @@ import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionOutputStream;
 import org.apache.hadoop.io.compress.SnappyCodec;
 import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.mapreduce.RecordWriter;
@@ -27,6 +30,8 @@ import org.apache.log4j.Logger;
  * a String record as bytes to HDFS without any reformatting or compession.
  */
 public class StringRecordWriterProvider implements RecordWriterProvider {
+    private static final int CREATE_OUTPUTSTREAM_TIMEOUT = 60; //in normal conditions, should never be reached
+
     private static Logger log = Logger.getLogger(StringRecordWriterProvider.class);
 
     public static final String ETL_OUTPUT_RECORD_DELIMITER = "etl.output.record.delimiter";
@@ -36,7 +41,7 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
 
     private String extension = "";
     private boolean isCompressed = false;
-    private CompressionCodec codec = null;
+    private CompressionPool compressionPool = null;
 
     public StringRecordWriterProvider(TaskAttemptContext  context) {
     	Configuration conf = context.getConfiguration();
@@ -57,8 +62,10 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
             } else {
                 codecClass = DefaultCodec.class;
             }
-            codec = ReflectionUtils.newInstance(codecClass, conf);
+            CompressionCodec codec = ReflectionUtils.newInstance(codecClass, conf);
             extension = codec.getDefaultExtension();
+            int maxConcurrentWriters = EtlMultiOutputFormat.getMaxConcurrentWriters(context);
+            compressionPool = new CompressionPool(codec, maxConcurrentWriters, maxConcurrentWriters);
         }
     }
 
@@ -105,7 +112,7 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
         if (!isCompressed) {
             return new ByteRecordWriter(fileOut, recordDelimiter);
         } else {
-            return new ByteRecordWriter(new DataOutputStream(codec.createOutputStream(fileOut)), recordDelimiter);
+            return new ByteRecordWriter(compressionPool.create(fileOut, CREATE_OUTPUTSTREAM_TIMEOUT, TimeUnit.SECONDS), recordDelimiter);
         }
 
         /*
@@ -129,11 +136,11 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
         */
     }
 
-    protected static class ByteRecordWriter extends RecordWriter<IEtlKey, CamusWrapper> {
-        private DataOutputStream out;
+    protected class ByteRecordWriter extends RecordWriter<IEtlKey, CamusWrapper> {
+        private OutputStream out;
         private String recordDelimiter;
 
-        public ByteRecordWriter(DataOutputStream out, String recordDelimiter) {
+        public ByteRecordWriter(OutputStream out, String recordDelimiter) {
             this.out = out;
             this.recordDelimiter = recordDelimiter;
         }
@@ -149,6 +156,9 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
 
         @Override
         public void close(TaskAttemptContext taskAttemptContext) throws IOException, InterruptedException {
+            if (out instanceof CompressionOutputStream) {
+                compressionPool.closeAndRelease((CompressionOutputStream)out);
+            }
             out.close();
         }
     }
