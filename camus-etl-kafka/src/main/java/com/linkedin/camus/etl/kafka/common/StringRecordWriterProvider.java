@@ -5,7 +5,6 @@ import com.linkedin.camus.etl.IEtlKey;
 import com.linkedin.camus.etl.RecordWriterProvider;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 
-import java.io.BufferedOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
@@ -100,7 +99,7 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
             return new ByteRecordWriter(fileOut, recordDelimiter);
         } else {
             FSDataOutputStream fileOut = fs.create(path, false);
-            return new ByteRecordWriter(new DataOutputStream(new BufferedOutputStream(codec.createOutputStream(fileOut))), recordDelimiter);
+            return new ByteRecordWriter(new DataOutputStream(codec.createOutputStream(fileOut)), recordDelimiter);
         }
 
         /*
