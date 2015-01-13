@@ -31,6 +31,7 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
 
   private RecordWriterCache dataWriters;
   private EtlMultiOutputCommitter committer;
+  private RecordWriterProvider recordWriterProvider;
 
   public EtlMultiOutputRecordWriter(TaskAttemptContext context, EtlMultiOutputCommitter committer) throws IOException,
       InterruptedException
@@ -57,6 +58,7 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
       beginTimeStamp = 0;
     }
     this.dataWriters = new RecordWriterCache(EtlMultiOutputFormat.getMaxConcurrentWriters(context));
+    this.recordWriterProvider = createRecordWriterProvider(context);
   }
 
   @Override
@@ -144,6 +146,10 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
                                                                   CamusWrapper value) throws IOException,
       InterruptedException
   {
+    return recordWriterProvider.getDataRecordWriter(context, fileName, value, committer);
+  }
+
+private RecordWriterProvider createRecordWriterProvider(TaskAttemptContext context) {
     RecordWriterProvider recordWriterProvider = null;
     try
     {
@@ -164,6 +170,6 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object>
     {
         throw new IllegalStateException(e);
     }
-    return recordWriterProvider.getDataRecordWriter(context, fileName, value, committer);
-  }
+    return recordWriterProvider;
+}
 }
