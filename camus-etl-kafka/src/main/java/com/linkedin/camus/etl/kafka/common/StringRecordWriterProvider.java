@@ -71,7 +71,7 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
             CompressionCodec codec = ReflectionUtils.newInstance(codecClass, conf);
             extension = codec.getDefaultExtension();
             int maxConcurrentWriters = EtlMultiOutputFormat.getMaxConcurrentWriters(context);
-            compressionPool = new CompressionPool(codec, maxConcurrentWriters, maxConcurrentWriters);
+            compressionPool = new CompressionPool(codec, 0, maxConcurrentWriters);
         }
     }
 
