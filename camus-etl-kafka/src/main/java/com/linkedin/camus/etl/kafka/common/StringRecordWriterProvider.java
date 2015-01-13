@@ -101,13 +101,7 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
         );
 
         FileSystem fs = path.getFileSystem(context.getConfiguration());
-        FSDataOutputStream fileOut;
-        if (fs.exists(path)) {
-            log.info("File " + path + " already exists. Re-opening and appending.");
-            fileOut = fs.append(path);
-        } else {
-            fileOut = fs.create(path, false);
-        }
+        FSDataOutputStream fileOut = fs.create(path, false);
 
         if (!isCompressed) {
             return new ByteRecordWriter(fileOut, recordDelimiter);
