@@ -98,16 +98,7 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
             );
         }
 
-        // Get the filename for this RecordWriter.
-        Path path = new Path(
-            committer.getWorkPath(),
-            EtlMultiOutputFormat.getUniqueFile(
-                context, fileName, getFilenameExtension()
-            )
-        );
-
-        FileSystem fs = path.getFileSystem(context.getConfiguration());
-        FSDataOutputStream fileOut = fs.create(path, false);
+        FSDataOutputStream fileOut = getTemporaryOutputFile(context, fileName, committer);
 
         if (!isCompressed) {
             return new ByteRecordWriter(fileOut, recordDelimiter);
@@ -134,6 +125,33 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
             }
         };
         */
+    }
+
+    private FSDataOutputStream getTemporaryOutputFile(TaskAttemptContext context,
+            String fileName, FileOutputCommitter committer) throws IOException {
+        // Get the filename for this RecordWriter.
+        Path path = new Path(
+            committer.getWorkPath(),
+            EtlMultiOutputFormat.getUniqueFile(
+                context, fileName, getFilenameExtension()
+            )
+        );
+
+        FileSystem fs = path.getFileSystem(context.getConfiguration());
+        int index = 1;
+        while(fs.exists(path)) {
+            String suffixedFileName = String.format("%s__subpart-%d-", fileName, index);
+            log.warn("Temporary file "  + fileName + " already exists. Creating new file: " + suffixedFileName);
+            path = new Path(
+                    committer.getWorkPath(),
+                    EtlMultiOutputFormat.getUniqueFile(
+                            context, suffixedFileName, getFilenameExtension()
+                            )
+                    );
+            index++;
+        }
+
+        return fs.create(path, false);
     }
 
     protected class ByteRecordWriter extends RecordWriter<IEtlKey, CamusWrapper> {

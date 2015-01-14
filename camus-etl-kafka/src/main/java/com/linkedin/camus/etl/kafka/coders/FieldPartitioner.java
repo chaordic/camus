@@ -45,12 +45,17 @@ public class FieldPartitioner extends Partitioner {
         sb.append(topic).append("/");
         sb.append(EtlMultiOutputFormat.getDestPathTopicSubDir(context)).append("/");
 
-        StringTokenizer partitionElements = new StringTokenizer(encodedPartition, "_");
+        String[] prefixAndSuffix = encodedPartition.split("__");
+        StringTokenizer partitionElements = new StringTokenizer(prefixAndSuffix[0], "_");
         DateTime bucket = new DateTime(Long.valueOf(partitionElements.nextToken()));
         sb.append(bucket.toString(outputDateFormatter));
 
         while (partitionElements.hasMoreTokens()) {
             sb.append("/").append(partitionElements.nextToken());
+        }
+
+        if (prefixAndSuffix.length == 2) {
+            sb.append(prefixAndSuffix[1]);
         }
 
         return sb.toString();
