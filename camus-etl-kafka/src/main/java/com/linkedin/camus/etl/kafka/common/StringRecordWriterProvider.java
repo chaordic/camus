@@ -139,9 +139,9 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
 
         FileSystem fs = path.getFileSystem(context.getConfiguration());
         int index = 1;
+        String suffixedFileName = null;
         while(fs.exists(path)) {
-            String suffixedFileName = String.format("%s__subpart-%d-", fileName, index);
-            log.warn("Temporary file "  + fileName + " already exists. Creating new file: " + suffixedFileName);
+            suffixedFileName = String.format("%s__subpart-%d-", fileName, index);
             path = new Path(
                     committer.getWorkPath(),
                     EtlMultiOutputFormat.getUniqueFile(
@@ -149,6 +149,10 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
                             )
                     );
             index++;
+        }
+
+        if (suffixedFileName != null) {
+            log.warn("Temporary file "  + fileName + " already exists. Creating new subpart file: " + suffixedFileName);
         }
 
         return fs.create(path, false);
