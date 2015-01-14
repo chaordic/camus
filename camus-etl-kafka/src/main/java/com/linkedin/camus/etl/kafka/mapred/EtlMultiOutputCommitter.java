@@ -76,7 +76,7 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
             for (FileStatus f : fs.listStatus(workPath)) {
                 String file = f.getPath().getName();
                 if (file.startsWith("data")) {
-                    String workingFileName = file.substring(0, file.lastIndexOf("-m"));
+                    String workingFileName = getWorkingFileName(file);
                     EtlCounts count = counts.get(workingFileName);
 
                     String partitionedFile = getPartitionedPath(context, file,
@@ -118,7 +118,15 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
         offsetWriter.close();
         super.commitTask(context);
     }
-    
+
+    private String getWorkingFileName(String filename) {
+        if (filename.contains("__")) {
+            return filename.substring(0, filename.lastIndexOf("__")); //StringRecordWriter subpart- files
+        }
+
+        return filename.substring(0, filename.lastIndexOf("-m"));
+    }
+
     protected void commitFile(JobContext job, Path source, Path target) throws IOException{
       FileSystem.get(job.getConfiguration()).rename(source, target);
     }
@@ -140,8 +148,8 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
         return partitionedPath +
                     "/" + topic + "." + leaderId + "." + partition +
                     "." + count+
-                    "." + offset + 
-                    "." + encodedPartition + 
+                    "." + offset +
+                    "." + encodedPartition +
                     recordWriterProvider.getFilenameExtension();
     }
 }
