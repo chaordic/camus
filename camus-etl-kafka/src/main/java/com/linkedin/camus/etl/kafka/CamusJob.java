@@ -56,9 +56,7 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.tools.DistCp;
-import org.apache.hadoop.tools.DistCpOptionSwitch;
 import org.apache.hadoop.tools.DistCpOptions;
-import org.apache.hadoop.tools.util.DistCpUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
@@ -77,6 +75,7 @@ public class CamusJob extends Configured implements Tool {
 	public static final String ETL_S3_SYNC_ENABLED = "etl.s3.sync.enabled";
 	public static final String ETL_S3_SYNC_PATH = "etl.s3.sync.path";
 	public static final String ETL_S3_SYNC_DISTCP_LOGDIR = "etl.s3.sync.distcp.logdir";
+	public static final String ETL_S3_SYNC_DISTCP_IGNORE_FAILURES = "etl.s3.sync.distcp.ignorefailures";
 	public static final String ETL_EXECUTION_BASE_PATH = "etl.execution.base.path";
 	public static final String ETL_EXECUTION_HISTORY_PATH = "etl.execution.history.path";
 	public static final String ETL_COUNTS_PATH = "etl.counts.path";
@@ -390,6 +389,9 @@ public class CamusJob extends Configured implements Tool {
 		distCpOptions.setSyncFolder(true);
 		if (conf.get(ETL_S3_SYNC_DISTCP_LOGDIR) != null) {
 			distCpOptions.setLogPath(new Path(conf.get(ETL_S3_SYNC_DISTCP_LOGDIR)));
+		}
+		if (conf.getBoolean(ETL_S3_SYNC_DISTCP_IGNORE_FAILURES, false)) {
+		    distCpOptions.setIgnoreFailures(true);
 		}
 
 		try {
